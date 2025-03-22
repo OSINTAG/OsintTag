@@ -11,7 +11,6 @@ export default {
             return new Response("Invalid request: no valid domain found", { status: 400 });
         }
 
-        // סינון ברור ופשוט של בקשות זבל
         for (const blocked of BLOCKLIST) {
             if (path.includes(blocked)) {
                 return new Response("Blocked path", { status: 403 });
@@ -25,7 +24,7 @@ export default {
             const clonedResponse = response.clone();
             const content = await clonedResponse.text();
 
-            await handleOsintag(targetUrl, content, env, request.headers.get('X-API-Key'));
+            await handleOsintag(targetUrl, content, env);
 
             return response;
         } catch (e) {
