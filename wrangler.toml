@@ -2,9 +2,10 @@ name = "osintag"
 main = "worker.js"
 compatibility_date = "2024-03-22"
 
-[[kv_namespaces]]
-binding = "OSINTAG_KV"
-id = "adaa9aec60c94e06b05473b8837a004b"
+[[d1_databases]]
+binding = "DB"
+database_id = "3ab661e4-345d-47d6-8214-64dc2d5a7282"
+database_name = "osintag"
 
 [[queues.producers]]
 queue = "osint-queue"
@@ -22,3 +23,4 @@ invocation_logs = false
 
 [env.production]
 kv_namespaces = [{ binding = "OSINTAG_KV", id = "adaa9aec60c94e06b05473b8837a004b" }]
+

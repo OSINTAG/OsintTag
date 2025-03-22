@@ -16,22 +16,19 @@ export default {
             const clonedResponse = response.clone();
             const content = await clonedResponse.text();
 
-            // שולח לתור את הישויות ברקע בלי לחסום את המשתמש
             const entities = extractEntities(targetUrl, content);
             await env.OSINT_QUEUE.send({ entities });
 
-            // מיד מחזיר את התגובה למשתמש ללא המתנה
             return response;
-
-        } catch (e) {
-            return new Response("Error fetching upstream resource", { status: 500 });
+        } catch {
+            return new Response("Error fetching resource", { status: 500 });
         }
     },
 
     async queue(batch, env) {
         const { handleQueue } = await import('./osintag');
         for (const message of batch.messages) {
-            await handleQueue(message.body.entities, env);
+            await handleQueue(message.body.entities, message.body.existingTagId, env);
         }
     }
 };
