@@ -10,15 +10,12 @@ id = "adaa9aec60c94e06b05473b8837a004b"
 queue = "osint-queue"
 binding = "OSINT_QUEUE"
 
-# כאן מוסיפים worker נוסף כצרכן של התור
 [[queues.consumers]]
-queue = "osint-queue"
-script_name = "osintag-queue-worker"  # השם של הסקריפט שיהיה ב-Cloudflare
+queue = "osint-queue"  # אותו תור בדיוק
+# בלי script_name בכלל כי אותו worker מאזין ומטפל
 
-# הפעלת לוגים
 [observability.logs]
 enabled = true
 
-# הגדרת סביבה (production)
 [env.production]
 kv_namespaces = [{ binding = "OSINTAG_KV", id = "adaa9aec60c94e06b05473b8837a004b" }]
