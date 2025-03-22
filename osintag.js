@@ -1,33 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 
-export async function handleOsintag(queryUrl, data, env) {
-  const entities = extractEntities(queryUrl, data);
-  let tagId = await findExistingTag(entities, env);
-
-  if (!tagId) {
-    tagId = await createOsintag(env);
-  }
-
-  await saveEntities(tagId, entities, env);
-  await saveResults(tagId, queryUrl, data, env);
-  await env.OSINT_QUEUE.send({ entities, existingTagId: tagId });
-}
-
-async function createOsintag(env) {
+async function generateSignedOsintag(secretKey) {
   const date = new Date().toISOString().slice(0,10).replace(/-/g, '');
   const uuid = uuidv4();
-  const tagId = `OTAG-${date}-${uuid}`;
+  const tag = `OTAG-${date}-${uuid}`;
 
-  const signature = await generateSignature(tagId, env.OSINTAG_SECRET);
-
-  await env.DB.prepare(`
-    INSERT INTO osintags (id, signature) VALUES (?, ?)
-  `).bind(tagId, signature).run();
-
-  return tagId;
-}
-
-async function generateSignature(tag, secretKey) {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secretKey);
   const cryptoKey = await crypto.subtle.importKey(
@@ -39,50 +16,41 @@ async function generateSignature(tag, secretKey) {
   );
 
   const signature = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(tag));
-  return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const signatureHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  return { tag, signature: signatureHex };
+}
+
+export async function handleOsintag(queryUrl, data, env) {
+  const entities = extractEntities(queryUrl, data);
+  let existingTagId = await findExistingTag(entities, env);
+  let signature;
+
+  if (!existingTagId) {
+    const result = await generateSignedOsintag(env.OSINTAG_SECRET);
+    existingTagId = result.tag;
+    signature = result.signature;
+    await env.DB.prepare('INSERT INTO osintags (id, signature, created_at) VALUES (?, ?, ?)').bind(existingTagId, signature, new Date().toISOString()).run();
+  }
+
+  await saveResults(existingTagId, entities, data, queryUrl, env);
+  await env.OSINT_QUEUE.send({ entities, existingTagId });
 }
 
 async function findExistingTag(entities, env) {
   for (const entity of entities) {
-    const result = await env.DB.prepare(`
-      SELECT osintag_id FROM entities WHERE type = ? AND value = ? LIMIT 1
-    `).bind(entity.type, entity.value).first();
-
+    const result = await env.DB.prepare('SELECT osintag_id FROM entities WHERE value = ? LIMIT 1').bind(entity.value).first();
     if (result) return result.osintag_id;
   }
   return null;
 }
 
-async function saveEntities(tagId, entities, env) {
-  const stmt = env.DB.prepare(`
-    INSERT OR IGNORE INTO entities (osintag_id, type, value) VALUES (?, ?, ?)
-  `);
-
+async function saveResults(tagId, entities, data, queryUrl, env) {
   for (const entity of entities) {
-    await stmt.bind(tagId, entity.type, entity.value).run();
+    await env.DB.prepare('INSERT INTO entities (osintag_id, type, value) VALUES (?, ?, ?)').bind(tagId, entity.type, entity.value).run();
   }
-}
 
-async function saveResults(tagId, queryUrl, data, env) {
-  await env.DB.prepare(`
-    INSERT INTO results (osintag_id, query, data) VALUES (?, ?, ?)
-  `).bind(tagId, queryUrl, JSON.stringify(data)).run();
-}
-
-export async function performLeakCheck(entities, tagId, env) {
-  for (const entity of entities) {
-    await new Promise(r => setTimeout(r, 5000));
-
-    const leakUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(entity.value)}`;
-    const response = await fetch(leakUrl, {
-      headers: { 'X-API-Key': env.LEAKCHECK_API_KEY }
-    });
-
-    if (response.ok) {
-      const leakData = await response.json();
-      await handleOsintag(leakUrl, leakData, env);
-    }
-  }
+  await env.DB.prepare('INSERT INTO results (osintag_id, query, data, created_at) VALUES (?, ?, ?, ?)').bind(tagId, queryUrl, JSON.stringify(data), new Date().toISOString()).run();
 }
 
 function extractEntities(queryUrl, data) {
@@ -103,4 +71,3 @@ function extractEntities(queryUrl, data) {
 
   return entities;
 }
-
