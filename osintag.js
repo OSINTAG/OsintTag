@@ -1,6 +1,6 @@
-import { findExistingTag, createNewTag, updateIndex } from './storage';
+import { updateIndex } from './storage';
 
-function extractEntities(data) {
+function extractEntities(queryUrl, data) {
     const entities = [];
 
     const emailRegex = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
@@ -12,6 +12,11 @@ function extractEntities(data) {
     JSON.stringify(data).replace(domainRegex, domain => entities.push({ type: 'domain', value: domain }));
     JSON.stringify(data).replace(/"password":"([^"]+)"/g, (_, pwd) => entities.push({ type: 'password', value: pwd }));
 
+    const url = new URL(queryUrl);
+    url.searchParams.forEach((value, key) => {
+        entities.push({ type: key, value });
+    });
+
     return entities;
 }
 
@@ -20,19 +25,18 @@ function shouldMerge(existingEntities, newEntities) {
     let weakMatches = 0;
 
     for (const newEnt of newEntities) {
-        for (const existing of existingEntities) {
-            if (newEntity.type === existingEntity.type && newEntity.value === existingEntity.value) {
-                if (strongMatchTypes.includes(newEntity.type)) return true;
+        for (const existingEnt of existingEntities) {
+            if (newEnt.type === existingEnt.type && newEnt.value === existingEnt.value) {
+                if (strongMatchTypes.includes(newEnt.type)) return true;
                 weakMatches++;
             }
         }
     }
 
-    if (weakMatches >= 2) return true;
-    return false;
+    return weakMatches >= 2;
 }
 
-export async function handleOsintag(queryUrl, data, env, leakcheckApiKey) {
+export async function handleOsintag(queryUrl, data, env) {
     const entities = extractEntities(queryUrl, data);
 
     let existingTagId = null;
@@ -41,28 +45,38 @@ export async function handleOsintag(queryUrl, data, env, leakcheckApiKey) {
         if (existingTagId) break;
     }
 
-    if (!existingTagId) existingTagId = "OSINTAG" + Date.now();
+    if (!existingTagId) existingTagId = "OSINTAG_" + Date.now();
 
     await updateIndex(existingTagId, entities, data, queryUrl, env);
 
     await Promise.all(entities.map(async entity => {
         const leakUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(entity.value)}`;
-        const leakResponse = await fetch(leakcheckUrl, { headers: { 'X-API-Key': env.LEAKCHECK_API_KEY } });
 
-        if (leakcheckResponse.ok) {
-            const leakData = await leakcheckResponse.json();
-            const newEntities = extractEntities(leakcheckResponse.url, leakData);
+        const leakResponse = await fetch(leakUrl, {
+            headers: { 'X-API-Key': env.LEAKCHECK_API_KEY, 'Accept': 'application/json' }
+        });
+
+        if (leakResponse.ok) {
+            const leakData = await leakResponse.json();
+            const newEntities = extractEntities(leakUrl, leakData);
 
             let mergeToTag = existingTagId;
+
             for (const newEntity of newEntities) {
                 const existingSecondaryTag = await env.OSINTAG_KV.get(`${newEntity.type}:${newEntity.value}`);
-                if (existingSecondaryTagId && existingTagId !== existingTagId && shouldMerge(entities, newEntities)) {
-                    mergeToTag = existingTagId;
-                    break;
+                if (existingSecondaryTag && existingSecondaryTag !== existingTagId) {
+
+                    const existingData = await env.OSINTAG_KV.get(existingSecondaryTag);
+                    const existingSecondaryEntities = existingData ? JSON.parse(existingData).entities : {};
+
+                    if (shouldMerge(entities, newEntities.concat(existingSecondaryEntities))) {
+                        mergeToTag = existingSecondaryTag;
+                        break;
+                    }
                 }
             }
 
-            await updateIndex(mergeToTag, newEntities, leakData, leakcheckResponse.url, env);
+            await updateIndex(mergeToTag, newEntities, leakData, leakUrl, env);
         }
-    }
+    }));
 }
