@@ -1,6 +1,6 @@
 import { updateIndex } from './storage';
 
-function extractEntities(queryUrl, data) {
+export function extractEntities(queryUrl, data) {
     const entities = [];
 
     const emailRegex = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
@@ -20,7 +20,7 @@ function extractEntities(queryUrl, data) {
     return entities;
 }
 
-function shouldMerge(existingEntities, newEntities) {
+export function shouldMerge(existingEntities, newEntities) {
     const strongMatchTypes = ['email', 'phone'];
     let weakMatches = 0;
 
@@ -49,14 +49,16 @@ export async function handleOsintag(queryUrl, data, env) {
 
     await updateIndex(existingTagId, entities, data, queryUrl, env);
 
-    // הפעלת התהליך הנוסף ברקע בלי להמתין לו
-    performBackgroundChecks(entities, existingTagId, env);
+    // שליחת המשימות לתור, ללא המתנה
+    await env.OSINT_QUEUE.send({ entities, existingTagId });
 }
 
-// תהליך רקע שמבצע שאילתות בקצב של כל 5 שניות
-async function performBackgroundChecks(entities, existingTagId, env) {
+// פונקציה לטיפול בתור בצורה מבוקרת, כל 5 שניות בקשה
+export async function handleQueue(entities, env, existingTagId = null) {
+    if (!existingTagId) existingTagId = "OSINTAG_" + Date.now();
+
     for (const entity of entities) {
-        await new Promise(res => setTimeout(res, 5000)); // המתנה 5 שניות בין כל בקשה
+        await new Promise(res => setTimeout(res, 5000));
 
         const leakUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(entity.value)}`;
 
@@ -87,7 +89,7 @@ async function performBackgroundChecks(entities, existingTagId, env) {
                 await updateIndex(mergeToTag, newEntities, leakData, leakUrl, env);
             }
         } catch (err) {
-            console.error(`Background check error for ${entity.value}`, err);
+            console.error(`Queue check error for ${entity.value}`, err);
         }
     }
 }
