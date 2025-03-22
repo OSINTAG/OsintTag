@@ -5,18 +5,21 @@ export default {
     const url = new URL(request.url);
     const targetUrl = url.pathname.substring(1) + url.search;
 
-    const response = await fetch(`https://${targetUrl}`, request);
-    const clonedResponse = response.clone();
+    const originalResponse = await fetch(`https://${targetUrl}`, request);
+
+    // משתמשים ב־tee כדי לאפשר קריאה כפולה ללא שגיאות.
+    const [responseForClient, responseForProcessing] = originalResponse.body.tee();
+    const responseClone = new Response(responseForProcessing, originalResponse);
 
     let data;
     try {
-      data = await clonedResponse.json();
+      data = await responseClone.clone().json();
     } catch {
-      data = { text: await clonedResponse.text() };
+      data = { text: await responseClone.text() };
     }
 
     handleOsintag(targetUrl, data, env); // פועל ברקע, לא מעכב תגובה
-    return response;
+    return new Response(responseForClient, originalResponse); // החזרת תגובה נקייה ללקוח
   },
 
   async queue(batch, env) {

@@ -8,11 +8,7 @@ async function generateSignedOsintag(secretKey) {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secretKey);
   const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
+    "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
   );
 
   const signature = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(tag));
@@ -30,7 +26,11 @@ export async function handleOsintag(queryUrl, data, env) {
     const result = await generateSignedOsintag(env.OSINTAG_SECRET);
     existingTagId = result.tag;
     signature = result.signature;
-    await env.DB.prepare('INSERT INTO osintags (id, signature, created_at) VALUES (?, ?, ?)').bind(existingTagId, signature, new Date().toISOString()).run();
+
+    await env.DB.prepare(`
+      INSERT INTO osintags (id, signature, created_at)
+      VALUES (?, ?, ?)
+    `).bind(existingTagId, signature, new Date().toISOString()).run();
   }
 
   await saveResults(existingTagId, entities, data, queryUrl, env);
@@ -39,7 +39,9 @@ export async function handleOsintag(queryUrl, data, env) {
 
 async function findExistingTag(entities, env) {
   for (const entity of entities) {
-    const result = await env.DB.prepare('SELECT osintag_id FROM entities WHERE value = ? LIMIT 1').bind(entity.value).first();
+    const result = await env.DB.prepare(`
+      SELECT osintag_id FROM entities WHERE value = ? LIMIT 1
+    `).bind(entity.value).first();
     if (result) return result.osintag_id;
   }
   return null;
@@ -47,10 +49,15 @@ async function findExistingTag(entities, env) {
 
 async function saveResults(tagId, entities, data, queryUrl, env) {
   for (const entity of entities) {
-    await env.DB.prepare('INSERT INTO entities (osintag_id, type, value) VALUES (?, ?, ?)').bind(tagId, entity.type, entity.value).run();
+    await env.DB.prepare(`
+      INSERT INTO entities (osintag_id, type, value) VALUES (?, ?, ?)
+    `).bind(tagId, entity.type, entity.value).run();
   }
 
-  await env.DB.prepare('INSERT INTO results (osintag_id, query, data, created_at) VALUES (?, ?, ?, ?)').bind(tagId, queryUrl, JSON.stringify(data), new Date().toISOString()).run();
+  await env.DB.prepare(`
+    INSERT INTO results (osintag_id, query, data, created_at)
+    VALUES (?, ?, ?, ?)
+  `).bind(tagId, queryUrl, JSON.stringify(data), new Date().toISOString()).run();
 }
 
 function extractEntities(queryUrl, data) {
