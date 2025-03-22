@@ -3,17 +3,29 @@ import { handleOsintag } from './osintag';
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
-        const targetUrl = url.pathname.slice(1) + url.search;
+        const path = url.pathname.slice(1);
 
-        if (!targetUrl) {
-            return new Response("Missing target URL", { status: 400 });
+        // בודק שהנתיב כולל דומיין חוקי (לפחות נקודה אחת)
+        if (!path.includes('.')) {
+            return new Response("Invalid request: no valid domain found", { status: 400 });
         }
 
-        const response = await fetch(`https://${targetUrl}`, request);
-        const data = await response.clone().json();
+        const targetUrl = `https://${path}${url.search}`;
 
-        await handleOsintag(targetUrl, data, env);
+        try {
+            const response = await fetch(targetUrl, request);
 
-        return response;
+            // קורא את התשובה כטקסט (בלי להגביל ל-JSON)
+            const responseClone = response.clone();
+            const content = await responseClone.text();
+
+            // שולח לאוסינטאג בלי קשר לסוג התשובה (text/json/csv וכו')
+            await handleOsintag(targetUrl, content, env);
+
+            // מחזיר את התשובה המקורית למשתמש כמו שהיא
+            return response;
+        } catch (e) {
+            return new Response("Error fetching upstream resource", { status: 500 });
+        }
     }
 };
