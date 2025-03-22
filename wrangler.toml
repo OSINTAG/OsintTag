@@ -1,3 +1,7 @@
 name = "osintag"
 main = "worker.js"
 compatibility_date = "2024-03-22"
+
+[[kv_namespaces]]
+binding = "OSINTAG_KV"
+id = "<KV_NAMESPACE_ID>"

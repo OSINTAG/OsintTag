@@ -1,22 +1,19 @@
+import { handleOsintag } from './osintag';
+
 export default {
-    async fetch(request) {
+    async fetch(request, env) {
         const url = new URL(request.url);
-        const targetUrl = url.pathname.slice(1); // מוציא את הנתיב
+        const targetUrl = url.pathname.slice(1) + url.search;
 
         if (!targetUrl) {
             return new Response("Missing target URL", { status: 400 });
         }
 
-        const query = url.search;
-        const fullUrl = `https://${targetUrl}${query}`;
+        const response = await fetch(`https://${targetUrl}`, request);
 
-        const response = await fetch(fullUrl, request);
+        const data = await response.clone().json();
 
-        // מוחק את ה-API Key לפני אחסון (לא נשמר אצלך)
-        const safeUrl = fullUrl.replace(/key=[^&]+/gi, 'key=REDACTED');
-
-        // דוגמה פשוטה לשמירת מידע ברקע (לא חובה)
-        // saveToDB(safeUrl, await response.clone().json());
+        await handleOsintag(targetUrl, data, env);
 
         return response;
     }
