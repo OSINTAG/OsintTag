@@ -1,11 +1,3 @@
-export async function findExistingTag(entity, env) {
-    return await env.OSINTAG_KV.get(`${entity.type}:${entity.value}`);
-}
-
-export function createNewTag() {
-    return "OSINTAG_" + Date.now();
-}
-
 export async function updateIndex(tagId, entities, data, queryUrl, env) {
     for (const entity of entities) {
         await env.OSINTAG_KV.put(`${entity.type}:${entity.value}`, tagId);
