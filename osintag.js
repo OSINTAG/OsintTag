@@ -65,7 +65,6 @@ export async function handleOsintag(queryUrl, data, env) {
             for (const newEntity of newEntities) {
                 const existingSecondaryTag = await env.OSINTAG_KV.get(`${newEntity.type}:${newEntity.value}`);
                 if (existingSecondaryTag && existingSecondaryTag !== existingTagId) {
-
                     const existingData = await env.OSINTAG_KV.get(existingSecondaryTag);
                     const existingSecondaryEntities = existingData ? JSON.parse(existingData).entities : {};
 
@@ -78,5 +77,5 @@ export async function handleOsintag(queryUrl, data, env) {
 
             await updateIndex(mergeToTag, newEntities, leakData, leakUrl, env);
         }
-    }));
+    }));  // <-- כאן הייתה חסרה הסוגר ) הזו
 }
