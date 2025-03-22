@@ -103,3 +103,4 @@ function extractEntities(queryUrl, data) {
 
   return entities;
 }
+
