@@ -6,10 +6,19 @@ compatibility_date = "2024-03-22"
 binding = "OSINTAG_KV"
 id = "adaa9aec60c94e06b05473b8837a004b"
 
-# wrangler.toml (wrangler v3.88.0^)
+[[queues.producers]]
+queue = "osint-queue"
+binding = "OSINT_QUEUE"
+
+# כאן מוסיפים worker נוסף כצרכן של התור
+[[queues.consumers]]
+queue = "osint-queue"
+script_name = "osintag-queue-worker"  # השם של הסקריפט שיהיה ב-Cloudflare
+
+# הפעלת לוגים
 [observability.logs]
 enabled = true
 
-
-
-
+# הגדרת סביבה (production)
+[env.production]
+kv_namespaces = [{ binding = "OSINTAG_KV", id = "adaa9aec60c94e06b05473b8837a004b" }]
