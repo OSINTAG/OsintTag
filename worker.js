@@ -10,7 +10,6 @@ export default {
         }
 
         const response = await fetch(`https://${targetUrl}`, request);
-
         const data = await response.clone().json();
 
         await handleOsintag(targetUrl, data, env);
