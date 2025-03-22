@@ -12,15 +12,8 @@ queue = "osint-queue"
 binding = "OSINT_QUEUE"
 
 [[queues.consumers]]
-queue = "osint-queue"  # אותו תור בדיוק
-# בלי script_name בכלל כי אותו worker מאזין ומטפל
+queue = "osint-queue"
 
-# wrangler.toml (wrangler v3.88.0^)
 [observability.logs]
 enabled = true
-
 invocation_logs = false
-
-[env.production]
-kv_namespaces = [{ binding = "OSINTAG_KV", id = "adaa9aec60c94e06b05473b8837a004b" }]
-
