@@ -49,33 +49,45 @@ export async function handleOsintag(queryUrl, data, env) {
 
     await updateIndex(existingTagId, entities, data, queryUrl, env);
 
-    await Promise.all(entities.map(async entity => {
+    // הפעלת התהליך הנוסף ברקע בלי להמתין לו
+    performBackgroundChecks(entities, existingTagId, env);
+}
+
+// תהליך רקע שמבצע שאילתות בקצב של כל 5 שניות
+async function performBackgroundChecks(entities, existingTagId, env) {
+    for (const entity of entities) {
+        await new Promise(res => setTimeout(res, 5000)); // המתנה 5 שניות בין כל בקשה
+
         const leakUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(entity.value)}`;
 
-        const leakResponse = await fetch(leakUrl, {
-            headers: { 'X-API-Key': env.LEAKCHECK_API_KEY, 'Accept': 'application/json' }
-        });
+        try {
+            const leakResponse = await fetch(leakUrl, {
+                headers: { 'X-API-Key': env.LEAKCHECK_API_KEY, 'Accept': 'application/json' }
+            });
 
-        if (leakResponse.ok) {
-            const leakData = await leakResponse.json();
-            const newEntities = extractEntities(leakUrl, leakData);
+            if (leakResponse.ok) {
+                const leakData = await leakResponse.json();
+                const newEntities = extractEntities(leakUrl, leakData);
 
-            let mergeToTag = existingTagId;
+                let mergeToTag = existingTagId;
 
-            for (const newEntity of newEntities) {
-                const existingSecondaryTag = await env.OSINTAG_KV.get(`${newEntity.type}:${newEntity.value}`);
-                if (existingSecondaryTag && existingSecondaryTag !== existingTagId) {
-                    const existingData = await env.OSINTAG_KV.get(existingSecondaryTag);
-                    const existingSecondaryEntities = existingData ? JSON.parse(existingData).entities : {};
+                for (const newEntity of newEntities) {
+                    const existingSecondaryTag = await env.OSINTAG_KV.get(`${newEntity.type}:${newEntity.value}`);
+                    if (existingSecondaryTag && existingSecondaryTag !== existingTagId) {
+                        const existingData = await env.OSINTAG_KV.get(existingSecondaryTag);
+                        const existingSecondaryEntities = existingData ? JSON.parse(existingData).entities : {};
 
-                    if (shouldMerge(entities, newEntities.concat(existingSecondaryEntities))) {
-                        mergeToTag = existingSecondaryTag;
-                        break;
+                        if (shouldMerge(entities, newEntities.concat(existingSecondaryEntities))) {
+                            mergeToTag = existingSecondaryTag;
+                            break;
+                        }
                     }
                 }
-            }
 
-            await updateIndex(mergeToTag, newEntities, leakData, leakUrl, env);
+                await updateIndex(mergeToTag, newEntities, leakData, leakUrl, env);
+            }
+        } catch (err) {
+            console.error(`Background check error for ${entity.value}`, err);
         }
-    }));  // <-- כאן הייתה חסרה הסוגר ) הזו
+    }
 }
