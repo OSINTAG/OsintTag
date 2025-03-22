@@ -1,4 +1,4 @@
-import { handleOsintag, performLeakCheck } from './osintag';
+import { handleOsintag } from './osintag';
 
 export default {
   async fetch(request, env) {
@@ -7,6 +7,7 @@ export default {
 
     const response = await fetch(`https://${targetUrl}`, request);
 
+    // כאן התיקון - שימוש נכון ב-clone
     const clonedResponse = response.clone();
     let data;
     try {
@@ -15,9 +16,9 @@ export default {
       data = { text: await clonedResponse.text() };
     }
 
-    handleOsintag(targetUrl, data, env); // תהליך רקע, ללא המתנה
+    handleOsintag(targetUrl, data, env); // מתבצע ברקע, לא מעכב את התגובה
 
-    return response;
+    return response; // התגובה המקורית חוזרת נקייה
   },
 
   async queue(batch, env) {
@@ -26,3 +27,17 @@ export default {
     }
   }
 };
+
+async function performLeakCheck(entities, tagId, env) {
+  for (const entity of entities) {
+    await new Promise(r => setTimeout(r, 5000)); // המתנה בין בקשות
+
+    const leakUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(entity.value)}`;
+    const response = await fetch(leakUrl, { headers: { 'X-API-Key': env.LEAKCHECK_API_KEY } });
+
+    if (response.ok) {
+      const leakData = await response.json();
+      await handleOsintag(leakUrl, leakData, env);
+    }
+  }
+}
